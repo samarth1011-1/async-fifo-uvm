@@ -1,26 +1,23 @@
 # Asynchronous FIFO
 
 ## Overview
-
 This project implements an asynchronous FIFO in Verilog. It safely moves data between two clock domains that run at different speeds.
-
 The write side uses `wr_clk`. The read side uses `rd_clk`. Each side has its own active-low reset.
 
-<img src="image.png" width="700">
+<img src="images/image.png" width="700">
 
 ## Key Features
-
 - Separate read and write clocks
 - Parameter-based data width and FIFO depth
 - Gray code pointers for safe clock domain crossing
 - Two flip-flop sync stages
 - Full and empty flags
-- Random SystemVerilog testbench with data checks
+- UVM-based verification environment with a self-checking scoreboard
+- SystemVerilog Assertions (SVA) for protocol checking
+- Functional coverage on flow-control corner cases and data value ranges
 
 ## Architecture
-
 The FIFO has three main parts:
-
 1. A memory array stores the data.
 2. The write side controls writes and the `full` flag.
 3. The read side controls reads and the `empty` flag.
@@ -28,7 +25,6 @@ The FIFO has three main parts:
 Binary pointers select the memory address. Gray code pointers are sent between the two clock domains.
 
 ## CDC and Pointer Synchronization
-
 Binary pointers can change more than one bit at a time, so they are not sent across clock domains. Each binary pointer is first changed to Gray code:
 
 ```text
@@ -38,20 +34,16 @@ gray = (binary >> 1) ^ binary
 Gray code changes only one bit for each pointer step. The Gray code pointer then passes through two flip-flops in the other clock domain. This lowers the risk of unstable values being used by the FIFO logic.
 
 ## Full and Empty Detection
-
 The FIFO is empty when the next read Gray pointer matches the synced write Gray pointer.
-
 The FIFO is full when the next write Gray pointer matches the synced read Gray pointer with its top two bits inverted. This shows that the write pointer has moved one full buffer length ahead of the read pointer.
 
 Writes are allowed only when `full` is low. Reads are allowed only when `empty` is low.
 
 ## Files
-
 - `fifo.v`: FIFO design and two flip-flop sync modules
-- `fifotb.sv`: SystemVerilog testbench
+- `fifo_uvm_tb.sv`: UVM testbench (interfaces, agents, driver, monitor, scoreboard, env, test, top)
 
 ## Default Parameters
-
 | Parameter | Default | Meaning |
 | --- | ---: | --- |
 | `DATA_WIDTH` | 8 | Width of each data entry |
@@ -60,40 +52,50 @@ Writes are allowed only when `full` is low. Reads are allowed only when `empty` 
 
 `DEPTH` must be equal to `2^ADDR_WIDTH`.
 
-## Verification Strategy
+## Verification
 
-The testbench uses a SystemVerilog queue as a reference FIFO. Every accepted write is added to the queue. Every accepted read is compared with the oldest value in the queue.
+The FIFO is verified with a complete UVM testbench that checks both data correctness and protocol behavior across the two independent clock domains.
 
-The write clock has a 10 ns period. The read clock has a 14 ns period. This checks data transfer between clocks that run at different speeds.
+### Testbench Architecture
 
-## Test Scenarios
+The testbench has two separate agents — one for the write side and one for the read side.  
+Each agent contains a driver (to send transactions), a monitor (to observe the interface), and a sequencer.  
 
-- Reset both clock domains
-- Random write enable and write data
-- Random read enable
-- Writes while the read clock runs at a different speed
-- Reads while writes are still taking place
-- Data order check for every accepted read
-- Stop and report a failure when read data does not match
+Both monitors send observed transactions to a shared scoreboard. The scoreboard keeps a simple reference queue of written data and compares every read value against the expected data.
 
-The random test runs for 5000 ns.
+<img src="images/blk.png" width="700" alt="UVM Testbench Architecture">
 
-## Simulation
+### How Checking Works
 
-Example using Icarus Verilog:
+- The **write driver** only asserts `wr_en` when the FIFO is not full.  
+- The **read driver** only asserts `rd_en` when the FIFO is not empty.  
+- Monitors only forward transactions that were actually accepted by the FIFO.  
+- The scoreboard compares every successful read against the data that was previously written.  
+- At the end of the test it prints a clear summary: total transactions, matches, mismatches, and data coverage percentage.
 
-```sh
-iverilog -g2012 -o fifo_sim fifo.v fifotb.sv
-vvp fifo_sim
-```
+### Protocol Checks (Assertions)
 
-The testbench prints write, read, `PASS`, and `FAIL` messages. A successful read shows `PASS` with the data value.
+Two SystemVerilog assertions continuously watch the interfaces:
 
-## Design Assumptions
+- A write is never allowed while the FIFO is full.  
+- A read is never allowed while the FIFO is empty.  
 
-- The FIFO depth is a power of two.
-- Write and read clocks may run at different speeds.
-- Resets are active low and belong to their own clock domains.
-- Input data must be stable when a write is accepted.
-- A write is accepted only when `wr_en` is high and `full` is low.
-- A read is accepted only when `rd_en` is high and `empty` is low.
+These checks run in real time and report an error immediately if the protocol is violated.
+
+### Functional Coverage
+
+Coverage is collected on three important aspects:
+
+- Write enable vs. full flag (to confirm both successful writes and blocked writes are exercised)  
+- Read enable vs. empty flag (same idea on the read side)  
+- Actual data values that successfully passed through the FIFO (grouped into low, mid, and high ranges)
+
+This helps confirm that interesting corner cases and data ranges were hit during simulation.
+
+### Results
+
+At the end of every run the scoreboard prints a concise report showing how many transactions matched, how many failed, and the achieved data coverage.
+
+<img src="images/res.png" width="700" alt="Simulation Results">
+
+### Simulation carried out in EDA Playground
