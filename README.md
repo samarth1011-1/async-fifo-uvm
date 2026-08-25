@@ -99,3 +99,18 @@ At the end of every run the scoreboard prints a concise report showing how many 
 <img src="images/res.png" width="700" alt="Simulation Results">
 
 ### Simulation carried out in EDA Playground
+
+## Static Timing Analysis (OpenSTA - gscl45nm)
+
+| Clock  | Period (ns) | Frequency (MHz) | I/O Delay (ns) | WNS (ns) | TNS (ns) | Status   |
+|--------|-------------|------------------|-----------------|----------|----------|----------|
+| wr_clk | 10.00       | 100.00           | 1.00            | 0.00     | 0.00     | MET      |
+| rd_clk | 8.00        | 125.00           | 1.00            | 0.00     | 0.00     | MET      |
+| wr_clk | 2.00        | 500.00           | 0.30            | 0.00     | 0.00     | MET      |
+| rd_clk | 2.00        | 500.00           | 0.30            | 0.00     | 0.00     | MET      |
+| wr_clk | 0.60        | 1666.67          | 0.30            | -0.16    | -16.39   | VIOLATED |
+| rd_clk | 0.60        | 1666.67          | 0.30            | -0.18    | -16.39   | VIOLATED |
+| wr_clk | 0.80        | 1250.00          | 0.30            | 0.04     | 0.00     | MET      |
+| rd_clk | 0.80        | 1250.00          | 0.30            | 0.02     | 0.00     | MET      |
+
+**Estimated Fmax:** wr_clk ~1.32 GHz, rd_clk ~1.28 GHz
