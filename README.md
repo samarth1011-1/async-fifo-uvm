@@ -8,100 +8,24 @@ SystemVerilog/UVM verification environment for a dual-clock asynchronous FIFO wi
 ---
 
 ## 1. Design Overview
-
+ 
 An asynchronous FIFO transfers data between two independent clock domains — a write domain (`wr_clk`) and a read domain (`rd_clk`) — with no fixed phase relationship between them.
-
+ 
 Binary read/write pointers cannot cross clock domains directly, since more than one bit can change per cycle and risk metastability. Each pointer is converted to Gray code before crossing:
-
+ 
 ```text
 gray = (binary >> 1) ^ binary
 ```
-
+ 
 Gray code changes exactly one bit per increment. The pointer is then passed through a 2-flip-flop synchronizer in the receiving domain before use.
-
+ 
 | Flag | Assertion condition |
 |---|---|
 | `empty` | Synchronized write pointer == read pointer |
 | `full` | Write pointer == read pointer with top 2 bits inverted (write side one full buffer ahead) |
-
+ 
 Writes are legal only when `full` is low; reads are legal only when `empty` is low.
-
-## Files
-- `fifo.v`: FIFO design and two flip-flop sync modules
-- `fifo_uvm_tb.sv`: UVM testbench (interfaces, agents, driver, monitor, scoreboard, env, test, top)
-
-## Default Parameters
-| Parameter | Default | Meaning |
-| --- | ---: | --- |
-| `DATA_WIDTH` | 8 | Width of each data entry |
-| `ADDR_WIDTH` | 4 | Number of address bits |
-| `DEPTH` | 16 | Number of FIFO entries |
-
-`DEPTH` must be equal to `2^ADDR_WIDTH`.
-
-## Verification
-
-The FIFO is verified with a complete UVM testbench that checks both data correctness and protocol behavior across the two independent clock domains.
-
-### Testbench Architecture
-
-The testbench has two separate agents — one for the write side and one for the read side.  
-Each agent contains a driver (to send transactions), a monitor (to observe the interface), and a sequencer.  
-
-Both monitors send observed transactions to a shared scoreboard. The scoreboard keeps a simple reference queue of written data and compares every read value against the expected data.
-
-<img src="images/blk.png" width="700" alt="UVM Testbench Architecture">
-
-### How Checking Works
-
-- The **write driver** only asserts `wr_en` when the FIFO is not full.  
-- The **read driver** only asserts `rd_en` when the FIFO is not empty.  
-- Monitors only forward transactions that were actually accepted by the FIFO.  
-- The scoreboard compares every successful read against the data that was previously written.  
-- At the end of the test it prints a clear summary: total transactions, matches, mismatches, and data coverage percentage.
-
-### Protocol Checks (Assertions)
-
-Two SystemVerilog assertions continuously watch the interfaces:
-
-- A write is never allowed while the FIFO is full.  
-- A read is never allowed while the FIFO is empty.  
-
-These checks run in real time and report an error immediately if the protocol is violated.
-
-### Functional Coverage
-
-Coverage is collected on three important aspects:
-
-- Write enable vs. full flag (to confirm both successful writes and blocked writes are exercised)  
-- Read enable vs. empty flag (same idea on the read side)  
-- Actual data values that successfully passed through the FIFO (grouped into low, mid, and high ranges)
-
-This helps confirm that interesting corner cases and data ranges were hit during simulation.
-
-### Results
-
-At the end of every run the scoreboard prints a concise report showing how many transactions matched, how many failed, and the achieved data coverage.
-
-<img src="images/res.png" width="700" alt="Simulation Results">
-
-### Simulation carried out in EDA Playground
-
-## Static Timing Analysis (OpenSTA - gscl45nm)
-
-| Clock  | Period (ns) | Frequency (MHz) | I/O Delay (ns) | WNS (ns) | TNS (ns) | Status   |
-|--------|-------------|------------------|-----------------|----------|----------|----------|
-| wr_clk | 10.00       | 100.00           | 1.00            | 0.00     | 0.00     | MET      |
-| rd_clk | 8.00        | 125.00           | 1.00            | 0.00     | 0.00     | MET      |
-| wr_clk | 2.00        | 500.00           | 0.30            | 0.00     | 0.00     | MET      |
-| rd_clk | 2.00        | 500.00           | 0.30            | 0.00     | 0.00     | MET      |
-| wr_clk | 0.60        | 1666.67          | 0.30            | -0.16    | -16.39   | VIOLATED |
-| rd_clk | 0.60        | 1666.67          | 0.30            | -0.18    | -16.39   | VIOLATED |
-| wr_clk | 0.80        | 1250.00          | 0.30            | 0.04     | 0.00     | MET      |
-| rd_clk | 0.80        | 1250.00          | 0.30            | 0.02     | 0.00     | MET      |
-
-**Estimated Fmax:** wr_clk ~1.32 GHz, rd_clk ~1.28 GHz
-
+ 
 ---
 
 ## 2. DUT Specification
